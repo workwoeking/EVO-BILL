@@ -32,7 +32,7 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   accountNo: '',
   ifsc: '',
   upiId: '',
-  invoicePrefix: 'INV-',
+  invoicePrefix: 'INV-',  
   nextInvoiceNumber: 1001,
   quotePrefix: 'QT-',
   nextQuoteNumber: 101,
