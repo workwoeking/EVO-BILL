@@ -1,0 +1,57 @@
+{
+  "name": "evo-bill-desktop",
+  "version": "1.0.0",
+  "description": "EVO BILL Next-Gen - Modern Desktop Billing, Invoicing & GST Software",
+  "author": "EVO BILL Team",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev:next": "next dev",
+    "dev:electron": "wait-on tcp:3000 && electron .",
+    "dev": "concurrently -k -n \"NEXT,DESKTOP\" -c \"cyan,magenta\" \"npm run dev:next\" \"npm run dev:electron\"",
+    "build:next": "next build",
+    "build": "next build",
+    "dist": "npm run build && electron-builder",
+    "start": "next start",
+    "electron": "electron ."
+  },
+  "build": {
+    "appId": "com.evobill.desktop",
+    "productName": "EVO BILL Next-Gen",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "public/**/*",
+      "package.json"
+    ]
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "next": "^14.2.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "wait-on": "^8.0.1"
+  }
+}
