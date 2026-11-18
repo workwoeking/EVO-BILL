@@ -145,4 +145,7 @@ export interface ShopSettings {
   nextJobNumber: number;
   currencySymbol: string;
   theme: 'business' | 'midnight' | 'dark' | 'light';
+  appsScriptUrl?: string;
+  autoCloudSync?: boolean;
+  lastCloudSync?: string;
 }

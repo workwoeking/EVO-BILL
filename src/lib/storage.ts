@@ -40,6 +40,9 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   nextJobNumber: 201,
   currencySymbol: '₹',
   theme: 'business',
+  appsScriptUrl: '',
+  autoCloudSync: false,
+  lastCloudSync: '',
 };
 
 const DB_KEY = 'evo_bill_desktop_db_live';

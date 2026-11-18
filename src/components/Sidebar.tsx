@@ -16,6 +16,7 @@ import {
   Percent,
   Settings,
   Bell,
+  Cloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -77,16 +78,31 @@ export default function Sidebar() {
       </div>
 
       {/* Bottom status / shortcut */}
-      <div className="px-3 pt-3 border-t border-zinc-800/80">
+      <div className="px-3 pt-3 border-t border-zinc-800/80 space-y-2">
         <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-900/50 border border-zinc-800/60 text-[11px] text-zinc-400">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
             <span>Offline Ready</span>
           </div>
           <span className="text-[10px] bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded font-mono">
-            F1: Help
+            F1
           </span>
         </div>
+
+        {/* Google Apps Script Cloud Sync Pill */}
+        <Link
+          href="/settings"
+          className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 text-[11px] text-orange-400 font-semibold transition-colors"
+          title="Google Cloud Sync for workwoeking@gmail.com"
+        >
+          <div className="flex items-center gap-1.5 truncate">
+            <Cloud className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+            <span className="truncate">Cloud Sync</span>
+          </div>
+          <span className="text-[9px] bg-orange-500/20 px-1 rounded text-orange-300 font-mono">
+            workwoeking
+          </span>
+        </Link>
       </div>
     </aside>
   );
