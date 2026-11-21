@@ -46,6 +46,8 @@ export interface Quote {
   custId: string;
   custName: string;
   custPhone?: string;
+  custGstin?: string;
+  custAddress?: string;
   items: InvoiceItem[];
   subtotal: number;
   discount: number;

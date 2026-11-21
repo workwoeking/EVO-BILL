@@ -7,12 +7,41 @@
   --foreground: #fafafa;
 }
 
+/* Fast-click snappy UI responsiveness */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow-x: hidden;
   user-select: none;
+}
+
+/* Instant click feedback on all buttons and interactive elements */
+button, 
+a, 
+input[type="button"], 
+input[type="submit"],
+.btn-snappy {
+  cursor: pointer;
+  transition: transform 70ms cubic-bezier(0.2, 0, 0, 1), filter 70ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+button:active, 
+a:active, 
+.btn-snappy:active {
+  transform: scale(0.96) translateY(1px);
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button:active {
+  filter: brightness(0.92);
 }
 
 /* Electron drag region controls */
@@ -43,16 +72,54 @@ body {
   background: #3f3f46;
 }
 
-/* Printing styles */
+/* ====================================================================
+ * A4 STANDARD PRINT STYLES
+ * ==================================================================== */
+@page {
+  size: A4 portrait;
+  margin: 6mm 8mm;
+}
+
 @media print {
-  body {
+  html, body {
     background: #ffffff !important;
     color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
-  .no-print {
+
+  /* Hide all app chrome: titlebars, navigation, modals backdrop, actions */
+  body > *:not(#a4-invoice-sheet) {
     display: none !important;
   }
-  .print-only {
-    display: block !important;
+
+  aside, 
+  nav, 
+  header, 
+  .print\:hidden,
+  button,
+  .drag-region,
+  .no-drag {
+    display: none !important;
+  }
+
+  /* Force print target to fill A4 sheet cleanly */
+  #a4-invoice-sheet {
+    display: flex !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: none !important;
+    font-size: 11.5px !important;
   }
 }
