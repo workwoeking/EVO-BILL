@@ -268,16 +268,45 @@ export async function createNewCustomer(payload: {
     notes: `Initial onboarding subscription for ${plan?.name || payload.plan_id}`,
   });
 
-  // 6. Pre-provision Google Sheet Mapping Entry
-  const sheetName = `EVO BILL - ${payload.business_name} - ${customerId}`;
-  const mockSheetId = `1${Buffer.from(customerId + Date.now()).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 30)}`;
-  await supabase.from('google_sheet_mapping').insert({
-    customer_id: customerId,
-    spreadsheet_id: mockSheetId,
-    spreadsheet_name: sheetName,
-    spreadsheet_url: `https://docs.google.com/spreadsheets/d/${mockSheetId}/edit`,
-    sync_status: 'active',
-  });
+  // 6. Provision Real Google Sheet via backend API
+  // We call the provision endpoint internally using fetch (server-side)
+  // This avoids circular imports and runs asynchronously so customer creation is not blocked
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  try {
+    const sheetRes = await fetch(`${baseUrl}/api/admin/sheets/provision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_id: customerId,
+        business_name: payload.business_name,
+      }),
+    });
+    const sheetData = await sheetRes.json();
+    if (!sheetData.success) {
+      console.warn('[adminService] Google Sheet provisioning failed (non-blocking):', sheetData.error);
+      // Fallback: insert placeholder so DB is consistent
+      const placeholderId = `placeholder_${customerId}_${Date.now()}`;
+      await supabase.from('google_sheet_mapping').upsert({
+        customer_id: customerId,
+        spreadsheet_id: placeholderId,
+        spreadsheet_name: `EVO BILL - ${payload.business_name} - ${customerId}`,
+        spreadsheet_url: '',
+        sync_status: 'pending',
+        last_sync_error: sheetData.error || 'Provision failed',
+      }, { onConflict: 'customer_id' });
+    }
+  } catch (sheetErr: any) {
+    console.warn('[adminService] Google Sheet provision fetch failed:', sheetErr.message);
+    const placeholderId = `placeholder_${customerId}_${Date.now()}`;
+    await supabase.from('google_sheet_mapping').upsert({
+      customer_id: customerId,
+      spreadsheet_id: placeholderId,
+      spreadsheet_name: `EVO BILL - ${payload.business_name} - ${customerId}`,
+      spreadsheet_url: '',
+      sync_status: 'pending',
+      last_sync_error: sheetErr.message,
+    }, { onConflict: 'customer_id' });
+  }
 
   // 7. Audit Log
   await logAdminActivity({

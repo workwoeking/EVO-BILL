@@ -2,79 +2,61 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
-  ArrowLeft,
-  Building2,
-  Users,
-  Phone,
-  Mail,
-  MapPin,
-  FileText,
-  CreditCard,
-  Key,
-  Laptop,
-  FileSpreadsheet,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  ExternalLink,
-  ShieldCheck,
-  Calendar,
-  RefreshCw,
-  Plus,
-  Loader2,
-  RotateCcw
+  ArrowLeft, User, Building2, Mail, Phone, MapPin, FileText,
+  Calendar, Shield, CreditCard, ExternalLink, CheckCircle2,
+  XCircle, Clock, AlertTriangle, RefreshCw, Loader2, Key
 } from 'lucide-react';
 
-export default function CustomerDetailPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
-  const customerId = params.id;
-
+export default function CustomerDetailPage() {
+  const params = useParams();
+  const customerId = params?.id as string;
   const [customer, setCustomer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [extendMonths, setExtendMonths] = useState(12);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [extendMonths, setExtendMonths] = useState(1);
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchCustomer = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`/api/admin/customers/${customerId}`);
       const json = await res.json();
-      if (json.success) {
-        setCustomer(json.customer);
-      }
+      if (json.success) setCustomer(json.customer);
     } catch (err) {
-      console.error('Failed to load customer:', err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCustomer();
+    if (customerId) fetchCustomer();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
-  const updateStatus = async (newStatus: string) => {
-    if (!confirm(`Are you sure you want to mark this customer as ${newStatus}?`)) return;
+  const updateStatus = async (status: string) => {
     setActionLoading(true);
     try {
       const res = await fetch(`/api/admin/customers/${customerId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account_status: newStatus }),
+        body: JSON.stringify({ account_status: status }),
       });
       const json = await res.json();
-      if (json.success) {
-        fetchCustomer();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
+      if (json.success) { showToast(`Status: ${status}`); fetchCustomer(); }
+      else showToast(`Failed: ${json.error}`, false);
+    } catch (err: any) { showToast(err.message, false); }
+    finally { setActionLoading(false); }
   };
 
-  const handleExtend = async () => {
+  const extendSubscription = async () => {
     setActionLoading(true);
     try {
       const res = await fetch(`/api/admin/customers/${customerId}`, {
@@ -83,313 +65,207 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         body: JSON.stringify({ extend_months: extendMonths }),
       });
       const json = await res.json();
-      if (json.success) {
-        alert(`Subscription extended successfully by ${extendMonths} months!`);
-        fetchCustomer();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
+      if (json.success) { showToast(`Extended ${extendMonths} month(s)`); fetchCustomer(); }
+      else showToast(`Failed: ${json.error}`, false);
+    } catch (err: any) { showToast(err.message, false); }
+    finally { setActionLoading(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="p-16 text-center text-slate-400">
-        <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-2" />
-        <span className="text-xs">Loading customer profile...</span>
-      </div>
-    );
-  }
+  const provisionSheet = async () => {
+    if (!customer) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/admin/sheets/provision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customerId, business_name: customer.business_name }),
+      });
+      const json = await res.json();
+      if (json.success) { showToast(json.already_existed ? 'Already exists!' : `Created: ${json.title}`); fetchCustomer(); }
+      else showToast(`Failed: ${json.error}`, false);
+    } catch (err: any) { showToast(err.message, false); }
+    finally { setActionLoading(false); }
+  };
 
-  if (!customer) {
-    return (
-      <div className="max-w-4xl mx-auto p-12 text-center text-slate-400">
-        <h2 className="text-lg font-bold text-white mb-2">Customer Not Found</h2>
-        <p className="text-xs text-slate-500 mb-4">No customer record exists with ID {customerId}</p>
-        <Link href="/admin/customers" className="text-xs text-blue-400 hover:underline">
-          Return to Customer List
-        </Link>
-      </div>
-    );
-  }
+  const sc: Record<string, string> = {
+    active: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+    suspended: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
+    blocked: 'text-red-400 bg-red-500/10 border-red-500/30',
+    expired: 'text-slate-400 bg-slate-500/10 border-slate-500/30',
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-96">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+    </div>
+  );
+
+  if (!customer) return (
+    <div className="text-center py-24 text-slate-400">
+      <XCircle className="w-10 h-10 mx-auto mb-3 text-red-500" />
+      <p>Customer not found.</p>
+      <Link href="/admin/customers" className="text-blue-400 underline text-sm mt-2 inline-block">Back to Customers</Link>
+    </div>
+  );
 
   const sub = customer.subscriptions?.[0];
   const lic = customer.licenses?.[0];
   const sheet = customer.google_sheet_mapping?.[0];
-  const devices = lic?.customer_devices || [];
-  const payments = customer.payments || [];
+  const isSheetReal = sheet?.spreadsheet_id && !sheet.spreadsheet_id.startsWith('placeholder_');
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Back button and status header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="max-w-5xl mx-auto space-y-6">
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium border
+          ${toast.ok ? 'bg-emerald-900/90 text-emerald-300 border-emerald-700' : 'bg-red-900/90 text-red-300 border-red-700'}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link
-            href="/admin/customers"
-            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
-          >
+          <Link href="/admin/customers" className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-white tracking-tight">{customer.business_name}</h1>
-              <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 font-semibold">
-                {customer.customer_id}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">Contact: {customer.customer_name}</p>
+            <h1 className="text-xl font-extrabold text-white">{customer.customer_name}</h1>
+            <p className="text-xs text-slate-400 font-mono">{customer.customer_id}</p>
           </div>
         </div>
-
-        {/* Status Actions */}
-        <div className="flex items-center gap-2">
-          {customer.account_status === 'active' ? (
-            <button
-              onClick={() => updateStatus('suspended')}
-              disabled={actionLoading}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-xs font-medium transition-all"
-            >
-              Suspend Customer
-            </button>
-          ) : (
-            <button
-              onClick={() => updateStatus('active')}
-              disabled={actionLoading}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 text-xs font-medium transition-all"
-            >
-              Activate Customer
-            </button>
-          )}
-
-          <button
-            onClick={() => updateStatus('blocked')}
-            disabled={actionLoading}
-            className="px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 text-xs font-medium transition-all"
-          >
-            Block Access
-          </button>
-        </div>
+        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${sc[customer.account_status] || sc.expired}`}>
+          {customer.account_status}
+        </span>
       </div>
 
-      {/* Main Profile Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Customer & Business Details */}
-        <div className="space-y-6">
-          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-blue-400" />
-              <span>Business Information</span>
-            </h3>
-
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-                <span className="text-slate-400">Business Name</span>
-                <span className="font-semibold text-white">{customer.business_name}</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-                <span className="text-slate-400">Owner Name</span>
-                <span className="font-semibold text-white">{customer.customer_name}</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-                <span className="text-slate-400">Mobile</span>
-                <span className="font-semibold text-white">{customer.mobile}</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-                <span className="text-slate-400">Email</span>
-                <span className="text-white truncate max-w-[170px]">{customer.email}</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-                <span className="text-slate-400">GSTIN</span>
-                <span className="font-mono text-blue-400">{customer.gstin || 'Not Provided'}</span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-slate-400">Address</span>
-                <span className="text-slate-300 text-right max-w-[180px]">{customer.address || 'N/A'}</span>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-5">
+          {/* Customer Info */}
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2"><User className="w-4 h-4 text-blue-400" /> Customer Information</h2>
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div><span className="text-slate-400">Name</span><p className="text-white font-medium mt-0.5">{customer.customer_name}</p></div>
+              <div><span className="text-slate-400">Customer ID</span><p className="text-blue-400 font-mono font-bold mt-0.5">{customer.customer_id}</p></div>
+              <div><span className="text-slate-400">Email</span><p className="text-white mt-0.5 flex items-center gap-1"><Mail className="w-3 h-3" />{customer.email}</p></div>
+              <div><span className="text-slate-400">Mobile</span><p className="text-white mt-0.5 flex items-center gap-1"><Phone className="w-3 h-3" />{customer.mobile}</p></div>
+              <div><span className="text-slate-400">Business</span><p className="text-white font-medium mt-0.5 flex items-center gap-1"><Building2 className="w-3 h-3 text-purple-400" />{customer.business_name}</p></div>
+              <div><span className="text-slate-400">GSTIN</span><p className="text-white font-mono mt-0.5">{customer.gstin || '—'}</p></div>
+              {customer.address && <div className="col-span-2"><span className="text-slate-400">Address</span><p className="text-white mt-0.5 flex items-start gap-1"><MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />{customer.address}</p></div>}
             </div>
           </div>
 
-          {/* Google Spreadsheet Card */}
-          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Dedicated Google Spreadsheet</span>
-            </h3>
+          {/* Subscription */}
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2"><Calendar className="w-4 h-4 text-emerald-400" /> Subscription</h2>
+            {sub ? (
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div><span className="text-slate-400">Plan</span><p className="text-white font-medium mt-0.5">{sub.plan?.name || sub.plan_id}</p></div>
+                <div><span className="text-slate-400">Status</span><p className={`font-bold mt-0.5 uppercase ${sub.status === 'active' ? 'text-emerald-400' : 'text-yellow-400'}`}>{sub.status}</p></div>
+                <div><span className="text-slate-400">Start</span><p className="text-white mt-0.5">{sub.start_date}</p></div>
+                <div><span className="text-slate-400">Expiry</span><p className="text-white mt-0.5">{sub.expiry_date}</p></div>
+              </div>
+            ) : <p className="text-xs text-slate-500">No subscription found.</p>}
+            <div className="border-t border-slate-800 pt-4 flex items-center gap-3">
+              <select value={extendMonths} onChange={(e) => setExtendMonths(Number(e.target.value))}
+                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2 py-1.5">
+                {[1,2,3,6,12].map(m => <option key={m} value={m}>{m} Month{m > 1 ? 's' : ''}</option>)}
+              </select>
+              <button onClick={extendSubscription} disabled={actionLoading}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50">
+                {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Extend
+              </button>
+            </div>
+          </div>
 
-            {sheet?.spreadsheet_url ? (
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-2">
-                <p className="font-semibold text-white truncate">{sheet.spreadsheet_name}</p>
-                <p className="text-[10px] text-slate-500 font-mono">ID: {sheet.spreadsheet_id}</p>
-                <div className="pt-2 flex items-center justify-between border-t border-slate-800">
-                  <span className="text-emerald-400 text-[10px] flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Auto-sync Active
-                  </span>
-                  <a
-                    href={sheet.spreadsheet_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-medium"
-                  >
-                    <span>Open Sheet</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
+          {/* License */}
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2"><Key className="w-4 h-4 text-yellow-400" /> License</h2>
+            {lic ? (
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="col-span-2"><span className="text-slate-400">License Key</span><p className="text-yellow-300 font-mono font-bold mt-0.5 text-sm">{lic.license_key}</p></div>
+                <div><span className="text-slate-400">Status</span><p className={`font-bold mt-0.5 uppercase ${lic.status === 'active' ? 'text-emerald-400' : 'text-red-400'}`}>{lic.status}</p></div>
+                <div><span className="text-slate-400">Max Devices</span><p className="text-white mt-0.5">{lic.max_devices}</p></div>
+                <div><span className="text-slate-400">Expires</span><p className="text-white mt-0.5">{lic.expires_at ? new Date(lic.expires_at).toLocaleDateString('en-IN') : '—'}</p></div>
+                <div><span className="text-slate-400">Bound Devices</span><p className="text-white mt-0.5">{lic.customer_devices?.length || 0}</p></div>
               </div>
-            ) : (
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-400">
-                <p>Google Sheet auto-provisioned upon customer login.</p>
-              </div>
-            )}
+            ) : <p className="text-xs text-slate-500">No license found.</p>}
+          </div>
+
+          {/* Payments */}
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2"><CreditCard className="w-4 h-4 text-pink-400" /> Payment History</h2>
+            {customer.payments?.length > 0 ? (
+              <table className="w-full text-xs">
+                <thead><tr className="text-slate-400 border-b border-slate-800">
+                  <th className="pb-2 text-left">ID</th><th className="pb-2 text-left">Date</th>
+                  <th className="pb-2 text-right">Amount</th><th className="pb-2 text-left">Status</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {customer.payments.map((p: any) => (
+                    <tr key={p.payment_id}>
+                      <td className="py-2 font-mono text-slate-300 text-[10px]">{p.payment_id}</td>
+                      <td className="py-2 text-slate-400">{p.payment_date}</td>
+                      <td className="py-2 text-right font-bold text-white">&#8377;{p.paid_amount}</td>
+                      <td className="py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${p.payment_status === 'paid' ? 'text-emerald-400 bg-emerald-500/10' : 'text-yellow-400 bg-yellow-500/10'}`}>{p.payment_status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <p className="text-xs text-slate-500">No payments recorded.</p>}
           </div>
         </div>
 
-        {/* Middle & Right: Subscription, License, Devices & Payments */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Subscription & Expiry Extension Card */}
-          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-blue-400" />
-                <span>Subscription Plan & Lifecycle</span>
-              </h3>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                {sub?.plan?.name || 'Yearly Enterprise'}
-              </span>
+        {/* Right Column */}
+        <div className="space-y-5">
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <h2 className="text-sm font-bold text-white">Account Actions</h2>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => updateStatus('active')} disabled={actionLoading || customer.account_status === 'active'}
+                className="w-full py-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 transition-colors">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Activate
+              </button>
+              <button onClick={() => updateStatus('suspended')} disabled={actionLoading || customer.account_status === 'suspended'}
+                className="w-full py-2 rounded-lg bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 border border-yellow-500/30 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 transition-colors">
+                <AlertTriangle className="w-3.5 h-3.5" /> Suspend
+              </button>
+              <button onClick={() => updateStatus('blocked')} disabled={actionLoading || customer.account_status === 'blocked'}
+                className="w-full py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 transition-colors">
+                <XCircle className="w-3.5 h-3.5" /> Block
+              </button>
             </div>
+          </div>
 
-            <div className="grid grid-cols-3 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 block uppercase">Start Date</span>
-                <span className="font-semibold text-white">{sub?.start_date || 'N/A'}</span>
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-400" /> Google Sheet
+            </h2>
+            {isSheetReal ? (
+              <div className="space-y-2 text-xs">
+                <p className="text-emerald-400 font-medium flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Sheet Active</p>
+                <p className="text-slate-400 font-mono text-[10px] break-all">{sheet.spreadsheet_id}</p>
+                <a href={sheet.spreadsheet_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-400 hover:underline text-xs">
+                  <ExternalLink className="w-3 h-3" /> Open in Google Sheets
+                </a>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 block uppercase">Expiry Date</span>
-                <span className="font-semibold text-rose-400">{sub?.expiry_date || 'N/A'}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 block uppercase">Account Status</span>
-                <span className="font-semibold text-emerald-400 uppercase">{customer.account_status}</span>
-              </div>
-            </div>
-
-            {/* Extend Subscription Action */}
-            <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-              <div>
-                <p className="font-semibold text-white">Extend Customer Subscription</p>
-                <p className="text-[10px] text-slate-400">Adds validity to both subscription and hardware license.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={extendMonths}
-                  onChange={(e) => setExtendMonths(parseInt(e.target.value, 10))}
-                  className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs"
-                >
-                  <option value={1}>+1 Month</option>
-                  <option value={3}>+3 Months</option>
-                  <option value={6}>+6 Months</option>
-                  <option value={12}>+1 Year</option>
-                </select>
-                <button
-                  onClick={handleExtend}
-                  disabled={actionLoading}
-                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md shadow-blue-600/30 transition-all flex items-center gap-1"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Extend Validity</span>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-yellow-400 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> No real sheet yet</p>
+                <button onClick={provisionSheet} disabled={actionLoading}
+                  className="w-full py-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors">
+                  {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+                  Create Google Sheet
                 </button>
               </div>
-            </div>
-          </div>
-
-          {/* License & Bound Hardware Devices Card */}
-          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Key className="w-4 h-4 text-emerald-400" />
-                <span>Hardware License & Machine Binding</span>
-              </h3>
-              <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20 font-bold">
-                {lic?.license_key || 'EVO-XXXX-XXXX-XXXX'}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-400">
-              Maximum Devices Allowed: <strong className="text-white">{lic?.max_devices || 1} PC/Laptop</strong>. The desktop application binds to the motherboard machine ID to prevent piracy.
-            </p>
-
-            <div className="space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                Authorized Hardware Devices ({devices.length}/{lic?.max_devices || 1})
-              </span>
-              {devices.length === 0 ? (
-                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
-                  No devices bound yet. Will automatically bind on first desktop app login.
-                </div>
-              ) : (
-                devices.map((d: any) => (
-                  <div
-                    key={d.id}
-                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Laptop className="w-4 h-4 text-blue-400" />
-                      <div>
-                        <p className="font-semibold text-white">{d.device_name}</p>
-                        <p className="text-[10px] font-mono text-slate-400 truncate max-w-[200px]">
-                          Machine ID: {d.hardware_machine_id}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
-                      Bound & Active
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Payment History Card */}
-          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-amber-400" />
-              <span>Payment Records</span>
-            </h3>
-
-            {payments.length === 0 ? (
-              <p className="text-xs text-slate-500">No payment records found.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
-                      <th className="pb-2">Payment ID</th>
-                      <th className="pb-2">Date</th>
-                      <th className="pb-2">Amount</th>
-                      <th className="pb-2">Method</th>
-                      <th className="pb-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {payments.map((p: any) => (
-                      <tr key={p.payment_id}>
-                        <td className="py-2.5 font-mono text-slate-300">{p.payment_id}</td>
-                        <td className="py-2.5 text-slate-400">{p.payment_date}</td>
-                        <td className="py-2.5 font-bold text-emerald-400">₹{p.paid_amount}</td>
-                        <td className="py-2.5 text-slate-400">{p.payment_method}</td>
-                        <td className="py-2.5">
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold uppercase">
-                            {p.payment_status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             )}
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3 text-xs">
+            <h2 className="text-sm font-bold text-white">Account Meta</h2>
+            <div className="space-y-2 text-slate-400">
+              <div><span className="block">Registered</span><span className="text-white">{customer.registration_date || customer.created_at?.split('T')[0] || '—'}</span></div>
+              <div><span className="block">Auth User ID</span><span className="text-white font-mono text-[10px] break-all">{customer.auth_user_id || '—'}</span></div>
+              {customer.notes && <div><span className="block">Notes</span><span className="text-white">{customer.notes}</span></div>}
+            </div>
           </div>
         </div>
       </div>

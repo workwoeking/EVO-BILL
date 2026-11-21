@@ -125,16 +125,39 @@ export async function GET(request: Request) {
         expires_at: expiryDate.toISOString(),
       });
 
-      // Google Sheet Mapping
-      const sheetName = `EVO BILL - ${businessName} - ${customerId}`;
-      const mockSheetId = `1${Buffer.from(customerId + Date.now()).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 30)}`;
-      await adminClient.from('google_sheet_mapping').insert({
-        customer_id: customerId,
-        spreadsheet_id: mockSheetId,
-        spreadsheet_name: sheetName,
-        spreadsheet_url: `https://docs.google.com/spreadsheets/d/${mockSheetId}/edit`,
-        sync_status: 'active',
-      });
+      // Real Google Sheet Provisioning (non-blocking)
+      const baseUrl = origin || 'http://localhost:3000';
+      try {
+        const sheetRes = await fetch(`${baseUrl}/api/admin/sheets/provision`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: customerId, business_name: businessName }),
+        });
+        const sheetData = await sheetRes.json();
+        if (!sheetData.success) {
+          console.warn('[OAuth callback] Sheet provision failed:', sheetData.error);
+          const placeholderId = `placeholder_${customerId}_${Date.now()}`;
+          await adminClient.from('google_sheet_mapping').upsert({
+            customer_id: customerId,
+            spreadsheet_id: placeholderId,
+            spreadsheet_name: `EVO BILL - ${businessName} - ${customerId}`,
+            spreadsheet_url: '',
+            sync_status: 'pending',
+            last_sync_error: sheetData.error || 'Provision failed',
+          }, { onConflict: 'customer_id' });
+        }
+      } catch (sheetErr: any) {
+        console.warn('[OAuth callback] Sheet provision fetch error:', sheetErr.message);
+        const placeholderId = `placeholder_${customerId}_${Date.now()}`;
+        await adminClient.from('google_sheet_mapping').upsert({
+          customer_id: customerId,
+          spreadsheet_id: placeholderId,
+          spreadsheet_name: `EVO BILL - ${businessName} - ${customerId}`,
+          spreadsheet_url: '',
+          sync_status: 'pending',
+          last_sync_error: sheetErr.message,
+        }, { onConflict: 'customer_id' });
+      }
     } else if (!existingCust.auth_user_id) {
       // Link auth_user_id if was created by admin without auth
       await adminClient
