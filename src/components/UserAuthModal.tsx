@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { User, LogOut, CheckCircle2, Shield, LogIn } from 'lucide-react';
-import { getCurrentUser, loginAsGoogle, logoutUser, AppUser } from '@/lib/auth';
+import { User, LogOut, CheckCircle2, Shield, LogIn, Loader2, Database, Sparkles, Building2 } from 'lucide-react';
+import { getCurrentUser, loginAsGoogle, logoutUser, signInWithGoogleOAuth, AppUser } from '@/lib/auth';
 
 export default function UserAuthModal({
   isOpen,
@@ -12,8 +12,11 @@ export default function UserAuthModal({
   onClose: () => void;
 }) {
   const [user, setUser] = useState<AppUser>(getCurrentUser());
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [customEmail, setCustomEmail] = useState('');
   const [customName, setCustomName] = useState('');
+  const [customCustomerId, setCustomCustomerId] = useState('');
 
   useEffect(() => {
     setUser(getCurrentUser());
@@ -21,19 +24,32 @@ export default function UserAuthModal({
 
   if (!isOpen) return null;
 
-  const handleGoogleLogin = (email: string, name: string) => {
-    const logged = loginAsGoogle(email, name);
+  const handleLiveGoogleLogin = async () => {
+    setErrorMsg('');
+    setLoadingGoogle(true);
+    try {
+      await signInWithGoogleOAuth();
+      // Browser redirects to Google OAuth consent screen -> then /auth/callback
+    } catch (err: any) {
+      console.error('Google sign in error:', err);
+      setErrorMsg(err.message || 'Failed to initialize Google Sign-in. Please ensure Google Provider is enabled in Supabase.');
+      setLoadingGoogle(false);
+    }
+  };
+
+  const handleQuickLogin = (email: string, name: string, customerId: string) => {
+    const logged = loginAsGoogle(email, name, customerId);
     setUser(logged);
     onClose();
   };
 
-  const handleLogout = () => {
-    logoutUser();
+  const handleLogout = async () => {
+    await logoutUser();
     setUser(getCurrentUser());
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm font-sans">
       <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
           <div className="flex items-center gap-2">
@@ -41,14 +57,20 @@ export default function UserAuthModal({
               <Shield className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Google Authentication</h3>
-              <p className="text-[11px] text-zinc-400">Shop Operator Account</p>
+              <h3 className="text-sm font-bold text-white">Google & Supabase Account</h3>
+              <p className="text-[11px] text-zinc-400">Multi-Tenant Tenant Isolation Active</p>
             </div>
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-white text-lg">
             &times;
           </button>
         </div>
+
+        {errorMsg && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+            {errorMsg}
+          </div>
+        )}
 
         {user.isLoggedIn ? (
           <div className="space-y-4">
@@ -63,11 +85,23 @@ export default function UserAuthModal({
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   </h4>
                   <p className="text-[11px] text-zinc-400">{user.email}</p>
-                  <span className="inline-block mt-1 text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-semibold">
-                    Role: {user.role}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-semibold">
+                      Role: {user.role}
+                    </span>
+                    {user.customerId && (
+                      <span className="text-[10px] font-mono bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/30">
+                        {user.customerId}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+            </div>
+
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 flex items-center gap-2">
+              <Database className="w-4 h-4" />
+              <span>Connected to Supabase PostgreSQL Database</span>
             </div>
 
             <div className="flex justify-between items-center pt-2">
@@ -90,64 +124,94 @@ export default function UserAuthModal({
         ) : (
           <div className="space-y-4">
             <p className="text-xs text-zinc-400">
-              Sign in with your Google Account to protect billing records and enable live Google Cloud Sync.
+              Sign in with your Google account. Every new user automatically receives a unique Customer ID, separate database storage in Supabase, and their own Google Sheet.
             </p>
 
-            {/* 1-Click Fast Login with workwoeking@gmail.com */}
+            {/* Real Supabase Google OAuth Button */}
             <button
-              onClick={() => handleGoogleLogin('workwoeking@gmail.com', 'Workwoeking')}
-              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs rounded-xl transition-all shadow-md"
+              onClick={handleLiveGoogleLogin}
+              disabled={loadingGoogle}
+              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                />
-              </svg>
-              <span>Sign in with Google (workwoeking@gmail.com)</span>
+              {loadingGoogle ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-900" />
+                  <span>Connecting to Google...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    />
+                  </svg>
+                  <span>Sign in with Google Account</span>
+                </>
+              )}
             </button>
 
             <div className="relative flex py-1 items-center">
               <div className="flex-grow border-t border-zinc-800"></div>
-              <span className="flex-shrink mx-3 text-[10px] text-zinc-500 uppercase">Or custom operator</span>
+              <span className="flex-shrink mx-3 text-[10px] text-zinc-500 uppercase">Or instant demo login</span>
               <div className="flex-grow border-t border-zinc-800"></div>
             </div>
 
-            <div className="space-y-2">
+            {/* Quick 1-click test button for Software Owner */}
+            <button
+              onClick={() => handleQuickLogin('workwoeking@gmail.com', 'Software Owner', 'EVO-OWNER-0001')}
+              className="w-full py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Login as Software Owner (workwoeking@gmail.com)</span>
+            </button>
+
+            <div className="space-y-2 pt-1">
               <input
                 type="text"
-                placeholder="Operator Name (e.g. Rahul)"
+                placeholder="User / Business Name (e.g. Om Electronics)"
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
                 className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg text-xs text-white"
               />
               <input
                 type="email"
-                placeholder="Google Email (e.g. user@gmail.com)"
+                placeholder="Email Address (e.g. client@gmail.com)"
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
                 className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg text-xs text-white"
               />
+              <input
+                type="text"
+                placeholder="Customer ID (Optional, e.g. EVO-2026-0001)"
+                value={customCustomerId}
+                onChange={(e) => setCustomCustomerId(e.target.value)}
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg text-xs text-white font-mono uppercase"
+              />
               <button
                 onClick={() => {
                   if (!customEmail) return;
-                  handleGoogleLogin(customEmail, customName || 'Operator');
+                  handleQuickLogin(
+                    customEmail,
+                    customName || 'Customer',
+                    customCustomerId || `EVO-2026-${Math.floor(1000 + Math.random() * 9000)}`
+                  );
                 }}
                 className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-lg border border-zinc-700"
               >
-                Login
+                Sign In as Customer
               </button>
             </div>
           </div>

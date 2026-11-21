@@ -8,6 +8,8 @@ import { getDatabase, saveDatabase, AppDatabase, DEFAULT_SETTINGS } from '@/lib/
 import { formatCurrency } from '@/lib/utils';
 import { InvoiceItem, Invoice } from '@/types/billing';
 import A4PrintModal from '@/components/A4PrintModal';
+import { getCurrentUser } from '@/lib/auth';
+import { syncInvoiceToSupabase } from '@/lib/supabaseSync';
 
 export default function NewInvoicePage() {
   const router = useRouter();
@@ -101,6 +103,16 @@ export default function NewInvoicePage() {
 
     saveDatabase(updatedDb);
     setDb(updatedDb);
+
+    // Asynchronously sync invoice to Supabase under the customer's account
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser?.customerId) {
+        syncInvoiceToSupabase(currentUser.customerId, newInvoice);
+      }
+    } catch (syncErr) {
+      console.warn('Background Supabase sync notice:', syncErr);
+    }
 
     // Immediately trigger A4 Print preview and print dialog!
     setSavedInvoice(newInvoice);
