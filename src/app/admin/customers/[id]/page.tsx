@@ -205,7 +205,7 @@ export default function CustomerDetailPage() {
                     <tr key={p.payment_id}>
                       <td className="py-2 font-mono text-slate-300 text-[10px]">{p.payment_id}</td>
                       <td className="py-2 text-slate-400">{p.payment_date}</td>
-                      <td className="py-2 text-right font-bold text-white">&#8377;{p.paid_amount}</td>
+                      <td className="py-2 text-right font-bold text-white">₹{p.paid_amount}</td>
                       <td className="py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${p.payment_status === 'paid' ? 'text-emerald-400 bg-emerald-500/10' : 'text-yellow-400 bg-yellow-500/10'}`}>{p.payment_status}</span></td>
                     </tr>
                   ))}

@@ -1,11 +1,11 @@
 /**
  * POST /api/admin/sheets/sync
- * Syncs invoice/quotation data to customer's Google Spreadsheet
+ * Appends invoice/quotation row to customer's Google Sheet via Apps Script Web App
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
-import { appendInvoiceToSheet, appendQuotationToSheet } from '@/lib/google/sheetsService';
+import { appendRowToSheet, buildInvoiceRow, buildQuotationRow } from '@/lib/google/sheetsService';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,36 +24,34 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseAdminClient();
 
     // Get the customer's spreadsheet ID
-    const { data: mapping, error: mapError } = await supabase
+    const { data: mapping } = await supabase
       .from('google_sheet_mapping')
       .select('spreadsheet_id')
       .eq('customer_id', customer_id)
       .maybeSingle();
 
-    if (mapError || !mapping?.spreadsheet_id) {
+    if (!mapping?.spreadsheet_id || mapping.spreadsheet_id.startsWith('placeholder_')) {
       return NextResponse.json(
-        { success: false, error: 'No Google Sheet found for this customer. Create it first.' },
+        { success: false, error: 'No real Google Sheet found. Create it first.' },
         { status: 404 }
       );
     }
 
     const spreadsheetId = mapping.spreadsheet_id;
+    let result;
 
-    // Skip placeholder IDs
-    if (spreadsheetId.startsWith('placeholder_')) {
-      return NextResponse.json(
-        { success: false, error: 'Customer has a placeholder sheet. Provision a real sheet first.' },
-        { status: 422 }
-      );
+    if (type === 'invoice') {
+      const row = buildInvoiceRow(data);
+      result = await appendRowToSheet(spreadsheetId, 'Invoices', row);
+    } else if (type === 'quotation') {
+      const row = buildQuotationRow(data);
+      result = await appendRowToSheet(spreadsheetId, 'Quotations', row);
+    } else {
+      return NextResponse.json({ success: false, error: `Unknown type: ${type}` }, { status: 400 });
     }
 
-    // Sync based on type
-    if (type === 'invoice') {
-      await appendInvoiceToSheet(spreadsheetId, data);
-    } else if (type === 'quotation') {
-      await appendQuotationToSheet(spreadsheetId, data);
-    } else {
-      return NextResponse.json({ success: false, error: `Unknown sync type: ${type}` }, { status: 400 });
+    if (!result.success) {
+      return NextResponse.json({ success: false, error: result.error }, { status: 500 });
     }
 
     // Update last_sync_at

@@ -1,45 +1,28 @@
 /**
- * EVO BILL - Google Sheets Service
- * Uses Google Service Account for per-customer spreadsheet provisioning
- * NEVER import this in client-side code — server/API routes only
+ * EVO BILL - Google Sheets Service (via Apps Script Web App - FREE)
+ * 
+ * NO Google Cloud Console needed.
+ * NO Service Account needed.
+ * 100% FREE using Google Apps Script Web App.
+ * 
+ * Setup:
+ * 1. Open: https://script.google.com
+ * 2. Create new project, paste SheetCreator.gs code
+ * 3. Deploy → New Deployment → Web App
+ *    - Execute as: Me
+ *    - Who has access: Anyone
+ * 4. Copy Web App URL → paste in .env.local as APPS_SCRIPT_WEB_APP_URL
  */
 
-import { google } from 'googleapis';
+const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_WEB_APP_URL || '';
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-function getGoogleAuth() {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-
-  if (!email || !rawKey) {
-    throw new Error(
-      'Google Service Account credentials are not configured. ' +
-      'Set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY in .env.local'
-    );
-  }
-
-  // Replace escaped newlines (common when storing PEM in .env)
-  const privateKey = rawKey.replace(/\\n/g, '\n');
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: email,
-      private_key: privateKey,
-    },
-    scopes: [
-      'https://www.googleapis.com/auth/drive',
-      'https://www.googleapis.com/auth/spreadsheets',
-    ],
-  });
-
-  return auth;
-}
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-export interface ProvisionedSheet {
-  spreadsheetId: string;
-  spreadsheetUrl: string;
-  title: string;
+export interface SheetResult {
+  success: boolean;
+  spreadsheetId?: string;
+  spreadsheetUrl?: string;
+  title?: string;
+  already_existed?: boolean;
+  error?: string;
 }
 
 // ─── Create a new Google Sheet for a customer ─────────────────────────────────
@@ -47,190 +30,103 @@ export async function createCustomerSpreadsheet(
   customerId: string,
   businessName: string,
   ownerEmail: string = 'workwoeking@gmail.com'
-): Promise<ProvisionedSheet> {
-  const auth = getGoogleAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
-  const drive = google.drive({ version: 'v3', auth });
+): Promise<SheetResult> {
+  if (!APPS_SCRIPT_URL) {
+    return {
+      success: false,
+      error: 'APPS_SCRIPT_WEB_APP_URL is not set in .env.local. Deploy the SheetCreator.gs as a Web App first.',
+    };
+  }
 
-  const title = `EVO BILL - ${businessName} - ${customerId}`;
-
-  // 1️⃣ Create the spreadsheet
-  const createRes = await sheets.spreadsheets.create({
-    requestBody: {
-      properties: { title },
-      sheets: [
-        { properties: { sheetId: 0, title: 'Invoices', index: 0 } },
-        { properties: { sheetId: 1, title: 'Quotations', index: 1 } },
-        { properties: { sheetId: 2, title: 'Daily Book', index: 2 } },
-        { properties: { sheetId: 3, title: 'Expenses', index: 3 } },
-        { properties: { sheetId: 4, title: 'Customers', index: 4 } },
-        { properties: { sheetId: 5, title: 'Items', index: 5 } },
-      ],
-    },
-  });
-
-  const spreadsheetId = createRes.data.spreadsheetId!;
-  const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-
-  // 2️⃣ Add header rows on each sheet
-  await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId,
-    requestBody: {
-      valueInputOption: 'RAW',
-      data: [
-        {
-          range: 'Invoices!A1:L1',
-          values: [[
-            'Invoice No', 'Date', 'Customer Name', 'GSTIN', 'Phone',
-            'Items', 'Sub Total', 'GST %', 'GST Amount', 'Discount',
-            'Grand Total', 'Payment Status'
-          ]],
-        },
-        {
-          range: 'Quotations!A1:K1',
-          values: [[
-            'Quote No', 'Date', 'Customer Name', 'Phone',
-            'Items', 'Sub Total', 'GST %', 'GST Amount', 'Discount',
-            'Grand Total', 'Status'
-          ]],
-        },
-        {
-          range: 'Daily Book!A1:F1',
-          values: [['Date', 'Type', 'Description', 'Credit', 'Debit', 'Balance']],
-        },
-        {
-          range: 'Expenses!A1:E1',
-          values: [['Date', 'Category', 'Description', 'Amount', 'Note']],
-        },
-        {
-          range: 'Customers!A1:G1',
-          values: [['Name', 'Phone', 'Email', 'Address', 'GSTIN', 'Opening Balance', 'Added Date']],
-        },
-        {
-          range: 'Items!A1:F1',
-          values: [['Item Name', 'HSN Code', 'Unit', 'Purchase Price', 'Sale Price', 'GST %']],
-        },
-      ],
-    },
-  });
-
-  // 3️⃣ Bold the header rows
-  const boldRequests = [0, 1, 2, 3, 4, 5].map((sheetId) => ({
-    repeatCell: {
-      range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
-      cell: {
-        userEnteredFormat: {
-          textFormat: { bold: true },
-          backgroundColor: { red: 0.2, green: 0.6, blue: 0.9 },
-        },
-      },
-      fields: 'userEnteredFormat(textFormat,backgroundColor)',
-    },
-  }));
-
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId,
-    requestBody: { requests: boldRequests },
-  });
-
-  // 4️⃣ Share with owner email (editor access)
-  if (ownerEmail) {
-    await drive.permissions.create({
-      fileId: spreadsheetId,
-      requestBody: {
-        role: 'writer',
-        type: 'user',
-        emailAddress: ownerEmail,
-      },
-      sendNotificationEmail: false,
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' }, // Apps Script requires text/plain for JSON POST
+      body: JSON.stringify({
+        action: 'create',
+        customer_id: customerId,
+        business_name: businessName,
+        owner_email: ownerEmail,
+      }),
     });
-  }
 
-  return { spreadsheetId, spreadsheetUrl, title };
+    if (!response.ok) {
+      const text = await response.text();
+      return { success: false, error: `Apps Script returned ${response.status}: ${text.slice(0, 200)}` };
+    }
+
+    const result = await response.json();
+    return {
+      success: result.success ?? false,
+      spreadsheetId: result.spreadsheet_id,
+      spreadsheetUrl: result.spreadsheet_url,
+      title: result.title,
+      already_existed: result.already_existed,
+      error: result.error,
+    };
+  } catch (err: any) {
+    return { success: false, error: `Fetch failed: ${err.message}` };
+  }
 }
 
-// ─── Append invoice row to customer's spreadsheet ─────────────────────────────
-export async function appendInvoiceToSheet(
+// ─── Append a row to customer's sheet ─────────────────────────────────────────
+export async function appendRowToSheet(
   spreadsheetId: string,
-  invoice: {
-    invoiceNo: string;
-    date: string;
-    customerName: string;
-    gstin?: string;
-    phone?: string;
-    items: string;
-    subTotal: number;
-    gstPercent: number;
-    gstAmount: number;
-    discount: number;
-    grandTotal: number;
-    paymentStatus: string;
+  sheetName: 'Invoices' | 'Quotations' | 'Daily Book' | 'Expenses' | 'Customers' | 'Items',
+  row: (string | number)[]
+): Promise<{ success: boolean; error?: string }> {
+  if (!APPS_SCRIPT_URL) {
+    return { success: false, error: 'APPS_SCRIPT_WEB_APP_URL not configured' };
   }
-): Promise<void> {
-  const auth = getGoogleAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId,
-    range: 'Invoices!A:L',
-    valueInputOption: 'USER_ENTERED',
-    requestBody: {
-      values: [[
-        invoice.invoiceNo,
-        invoice.date,
-        invoice.customerName,
-        invoice.gstin || '',
-        invoice.phone || '',
-        invoice.items,
-        invoice.subTotal,
-        invoice.gstPercent,
-        invoice.gstAmount,
-        invoice.discount,
-        invoice.grandTotal,
-        invoice.paymentStatus,
-      ]],
-    },
-  });
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'append',
+        spreadsheet_id: spreadsheetId,
+        sheet_name: sheetName,
+        row,
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `Apps Script error: ${response.status}` };
+    }
+
+    const result = await response.json();
+    return { success: result.success ?? false, error: result.error };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
-// ─── Append quotation row ─────────────────────────────────────────────────────
-export async function appendQuotationToSheet(
-  spreadsheetId: string,
-  quote: {
-    quoteNo: string;
-    date: string;
-    customerName: string;
-    phone?: string;
-    items: string;
-    subTotal: number;
-    gstPercent: number;
-    gstAmount: number;
-    discount: number;
-    grandTotal: number;
-    status: string;
-  }
-): Promise<void> {
-  const auth = getGoogleAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
+// ─── Helper: Build invoice row array ─────────────────────────────────────────
+export function buildInvoiceRow(invoice: {
+  invoiceNo: string; date: string; customerName: string;
+  gstin?: string; phone?: string; items: string;
+  subTotal: number; gstPercent: number; gstAmount: number;
+  discount: number; grandTotal: number; paymentStatus: string;
+}): (string | number)[] {
+  return [
+    invoice.invoiceNo, invoice.date, invoice.customerName,
+    invoice.gstin || '', invoice.phone || '', invoice.items,
+    invoice.subTotal, invoice.gstPercent, invoice.gstAmount,
+    invoice.discount, invoice.grandTotal, invoice.paymentStatus,
+  ];
+}
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId,
-    range: 'Quotations!A:K',
-    valueInputOption: 'USER_ENTERED',
-    requestBody: {
-      values: [[
-        quote.quoteNo,
-        quote.date,
-        quote.customerName,
-        quote.phone || '',
-        quote.items,
-        quote.subTotal,
-        quote.gstPercent,
-        quote.gstAmount,
-        quote.discount,
-        quote.grandTotal,
-        quote.status,
-      ]],
-    },
-  });
+// ─── Helper: Build quotation row array ───────────────────────────────────────
+export function buildQuotationRow(quote: {
+  quoteNo: string; date: string; customerName: string; phone?: string;
+  items: string; subTotal: number; gstPercent: number; gstAmount: number;
+  discount: number; grandTotal: number; status: string;
+}): (string | number)[] {
+  return [
+    quote.quoteNo, quote.date, quote.customerName,
+    quote.phone || '', quote.items,
+    quote.subTotal, quote.gstPercent, quote.gstAmount,
+    quote.discount, quote.grandTotal, quote.status,
+  ];
 }
